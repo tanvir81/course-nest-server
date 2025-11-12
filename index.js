@@ -78,6 +78,7 @@ async function run() {
     });
 
     //  POST new course
+
     app.post("/courses", async (req, res) => {
       try {
         const newCourse = req.body;
