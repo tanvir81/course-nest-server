@@ -118,7 +118,7 @@ async function run() {
       }
     });
 
-    // POST enrollment
+    // POST enrollment added
     app.post("/enrollments", async (req, res) => {
       try {
         const enrollment = req.body;
