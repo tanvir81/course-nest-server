@@ -63,7 +63,7 @@ async function run() {
       }
     });
 
-    // single course with id
+    // single course With id
     app.get("/courses/:id", async (req, res) => {
       try {
         const id = req.params.id;
@@ -125,7 +125,6 @@ async function run() {
       try {
         const enrollment = req.body;
 
-        // Check for duplicate enrollment
         const existing = await enrollmentsCollection.findOne({
           courseId: enrollment.courseId,
           studentEmail: enrollment.studentEmail,
@@ -137,34 +136,48 @@ async function run() {
             .send({ message: "Already enrolled in this course" });
         }
 
-        //  Insert new enrollment
-        const result = await enrollmentsCollection.insertOne(enrollment);
-
-        // Also insert a progress record for course
         const course = await coursesCollection.findOne({
           _id: new ObjectId(enrollment.courseId),
         });
 
-        if (course) {
-          await progressCollection.updateOne(
-            {
+        if (!course) {
+          return res.status(404).send({ message: "Course not found" });
+        }
+
+        // Merge course details into enrollment
+        const enrichedEnrollment = {
+          ...enrollment,
+          courseTitle: course.title,
+          courseImage: course.imageUrl,
+          courseCategory: course.category,
+          courseDuration: course.duration,
+          coursePrice: course.price,
+          description: course.description,
+        };
+
+        const result = await enrollmentsCollection.insertOne(
+          enrichedEnrollment
+        );
+
+        // Insert progress record
+        await progressCollection.updateOne(
+          {
+            studentEmail: enrollment.studentEmail,
+            courseId: enrollment.courseId,
+          },
+          {
+            $setOnInsert: {
               studentEmail: enrollment.studentEmail,
               courseId: enrollment.courseId,
+              courseTitle: course.title,
+              completedModules: 0,
+              totalModules: course.totalModules || 0,
+              scores: [],
+              lastActive: new Date(),
             },
-            {
-              $setOnInsert: {
-                studentEmail: enrollment.studentEmail,
-                courseId: enrollment.courseId,
-                courseTitle: enrollment.courseTitle || course.title,
-                completedModules: 0,
-                totalModules: course.totalModules || 0,
-                scores: [],
-                lastActive: new Date(),
-              },
-            },
-            { upsert: true }
-          );
-        }
+          },
+          { upsert: true }
+        );
 
         res.send(result);
       } catch (error) {
