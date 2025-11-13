@@ -121,7 +121,7 @@ async function run() {
       }
     });
 
-    // POST enrollment
+    // POST enrollment code goes here
     app.post("/enrollments", async (req, res) => {
       try {
         const enrollment = req.body;
