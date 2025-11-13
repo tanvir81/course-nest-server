@@ -63,7 +63,7 @@ async function run() {
       }
     });
 
-    // single course by ID
+    // single course with id
     app.get("/courses/:id", async (req, res) => {
       try {
         const id = req.params.id;
