@@ -108,6 +108,7 @@ async function run() {
     });
 
     //  DELETE course
+
     app.delete("/courses/:id", async (req, res) => {
       try {
         const id = req.params.id;
