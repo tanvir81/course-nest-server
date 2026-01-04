@@ -6,6 +6,20 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 3000;
 
+const admin = require("firebase-admin");
+
+// Decode base64 service account key
+const decoded = Buffer.from(
+  process.env.FIREBASE_SERVICE_KEY,
+  "base64"
+).toString("utf8");
+const serviceAccount = JSON.parse(decoded);
+
+// Initialize Firebase Admin
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -28,7 +42,7 @@ app.get("/", (req, res) => {
 // Run Function Start Here
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const db = client.db("course_nest_db");
 
     // Collections
@@ -70,7 +84,10 @@ async function run() {
         const course = await coursesCollection.findOne({
           _id: new ObjectId(id),
         });
-        if (course) course._id = course._id.toString();
+        if (!course) {
+          return res.status(404).send({ message: "Course not found" });
+        }
+        course._id = course._id.toString();
         res.send(course);
       } catch (error) {
         res.status(500).send({ message: "Failed to fetch course details" });
@@ -173,6 +190,7 @@ async function run() {
               courseTitle: course.title,
               completedModules: 0,
               totalModules: course.totalModules || 0,
+              visitedLessons: [],
               scores: [],
               lastActive: new Date(),
             },
@@ -200,6 +218,47 @@ async function run() {
         res.send(formatted);
       } catch (error) {
         res.status(500).send({ message: "Failed to fetch enrollments" });
+      }
+    });
+
+    // GET progress for a student and course (Returns default if not found)
+    app.get("/progress", async (req, res) => {
+      try {
+        const { studentEmail, courseId } = req.query;
+        if (!studentEmail || !courseId) {
+          return res.status(400).send({ message: "Missing email or courseId" });
+        }
+        const progress = await progressCollection.findOne({ studentEmail, courseId });
+        if (!progress) {
+          return res.send({ completedModules: 0, totalModules: 0, studentEmail, courseId });
+        }
+        res.send(progress);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch progress" });
+      }
+    });
+
+    // PATCH progress
+    app.patch("/progress", async (req, res) => {
+      try {
+        const { studentEmail, courseId, completedModules, visitedLessons } = req.body;
+        const updateDoc = {
+          $set: { 
+            lastActive: new Date()
+          }
+        };
+
+        if (completedModules !== undefined) updateDoc.$set.completedModules = completedModules;
+        if (visitedLessons !== undefined) updateDoc.$set.visitedLessons = visitedLessons;
+
+        const result = await progressCollection.updateOne(
+          { studentEmail, courseId },
+          updateDoc,
+          { upsert: true }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to update progress" });
       }
     });
 
@@ -316,7 +375,7 @@ async function run() {
     });
 
     // MongoDB ping checking
-    await client.db("admin").command({ ping: 1 });
+    //await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. Connected to MongoDB!");
   } finally {
   }
@@ -325,6 +384,10 @@ async function run() {
 run().catch(console.dir);
 
 // Start server code
-app.listen(port, () => {
-  console.log(`Course-Nest server is running on port: ${port}`);
-});
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Course-Nest server is running on port: ${port}`);
+  });
+} else {
+  module.exports = app;
+}
