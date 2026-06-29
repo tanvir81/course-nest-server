@@ -374,6 +374,68 @@ async function run() {
       }
     });
 
+    // POST /generate-outline
+    app.post("/generate-outline", async (req, res) => {
+      try {
+        const { title, description } = req.body;
+        if (!title) {
+          return res.status(400).send({ message: "Course title is required" });
+        }
+
+        const { GoogleGenerativeAI } = require("@google/generative-ai");
+        
+        if (!process.env.GEMINI_API_KEY) {
+          return res.status(500).send({ message: "GEMINI_API_KEY is not configured in .env" });
+        }
+
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ 
+          model: "gemini-2.5-flash",
+          generationConfig: { responseMimeType: "application/json" }
+        });
+
+        const prompt = `You are an expert curriculum designer. 
+Generate a comprehensive, structured course outline (modules and lessons) for an online learning platform.
+Course Title: "${title}"
+Course Description: "${description || "Not provided"}"
+
+Provide the response in the following JSON format:
+{
+  "totalModules": <number of modules, e.g., 4>,
+  "duration": "<suggested total duration, e.g., '12 Hours'>",
+  "outline": [
+    {
+      "moduleNumber": 1,
+      "title": "Module Title Here",
+      "lessons": [
+        "Lesson 1 Title",
+        "Lesson 2 Title",
+        "Lesson 3 Title"
+      ]
+    }
+  ]
+}
+
+Only return raw JSON conforming to this schema. No markdown formatting.`;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        
+        let parsedData;
+        try {
+          parsedData = JSON.parse(responseText);
+        } catch (parseError) {
+          const cleaned = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+          parsedData = JSON.parse(cleaned);
+        }
+
+        res.send(parsedData);
+      } catch (error) {
+        console.error("Gemini Generation Error:", error);
+        res.status(500).send({ message: "Failed to generate outline", error: error.message });
+      }
+    });
+
     // MongoDB ping checking
     //await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. Connected to MongoDB!");
